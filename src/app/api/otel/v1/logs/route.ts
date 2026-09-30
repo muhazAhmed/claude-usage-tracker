@@ -53,6 +53,8 @@ export async function POST(req: NextRequest) {
   const events: EventDoc[] = records.map(({ ts, name, attrs, resource }) => {
     const host = res(resource["host.name"]);
     const osUser = res(resource["os.user"]);
+    const userEmail = str(attrs["user.email"]);
+    const accountId = str(attrs["user.account_uuid"]) ?? str(attrs["user.account_id"]);
     return {
       ts,
       receivedAt,
@@ -68,7 +70,11 @@ export async function POST(req: NextRequest) {
       durationMs: num(attrs["duration_ms"]),
       terminalType: str(attrs["terminal.type"]),
       appVersion: str(attrs["app.version"]) ?? str(resource["service.version"]),
-      userEmail: str(attrs["user.email"]),
+      userEmail,
+      accountId,
+      // The Claude account that was logged in: email when Claude Code reports it,
+      // otherwise a short account id, so switching accounts shows up separately.
+      account: userEmail ?? (accountId ? `account ${accountId.slice(0, 8)}` : undefined),
       deviceKey: `${host ?? "unknown-host"}|${osUser ?? "unknown-user"}`,
       host,
       osUser,

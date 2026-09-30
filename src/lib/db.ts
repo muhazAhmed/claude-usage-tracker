@@ -24,6 +24,7 @@ async function ensureIndexes(db: Db) {
     db.collection("events").createIndex({ ts: -1 }),
     db.collection("events").createIndex({ name: 1, ts: -1 }),
     db.collection("events").createIndex({ deviceKey: 1, ts: -1 }),
+    db.collection("events").createIndex({ account: 1, ts: -1 }),
   ]);
 }
 
@@ -43,6 +44,8 @@ export type EventDoc = {
   terminalType?: string;
   appVersion?: string;
   userEmail?: string;
+  accountId?: string;
+  account?: string;
   deviceKey: string;
   host?: string;
   osUser?: string;

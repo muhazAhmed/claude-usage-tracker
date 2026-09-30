@@ -5,6 +5,7 @@ import { eventMatch, RANGES, type RangeKey } from "@/lib/stats";
 
 const COLUMNS: (keyof EventDoc)[] = [
   "ts",
+  "account",
   "label",
   "host",
   "osUser",
@@ -33,7 +34,12 @@ export async function GET(req: NextRequest) {
   if (!(await isLoggedIn())) return new Response("unauthorized", { status: 401 });
   const sp = req.nextUrl.searchParams;
   const days = (sp.get("days") ?? "30") in RANGES ? (sp.get("days") as RangeKey) : "30";
-  const match = eventMatch({ days, device: sp.get("device") || undefined, model: sp.get("model") || undefined });
+  const match = eventMatch({
+    days,
+    device: sp.get("device") || undefined,
+    model: sp.get("model") || undefined,
+    account: sp.get("account") || undefined,
+  });
 
   const db = await getDb();
   const rows = await db

@@ -1,24 +1,27 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 type Props = {
   days: string;
   device?: string;
   model?: string;
+  account?: string;
   ranges: Record<string, string>;
   deviceOptions: { key: string; name: string }[];
   modelOptions: string[];
+  accountOptions: string[];
 };
 
-export function FilterBar({ days, device, model, ranges, deviceOptions, modelOptions }: Props) {
+export function FilterBar({ days, device, model, account, ranges, deviceOptions, modelOptions, accountOptions }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
 
-  function go(next: Partial<Record<"days" | "device" | "model", string>>) {
-    const merged = { days, device, model, ...next };
+  function go(next: Partial<Record<"days" | "device" | "model" | "account", string>>) {
+    const merged = { days, device, model, account, ...next };
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(merged)) if (v) qs.set(k, v);
-    router.push(`/?${qs}`);
+    router.push(`${pathname}?${qs}`);
   }
 
   const select =
@@ -43,6 +46,14 @@ export function FilterBar({ days, device, model, ranges, deviceOptions, modelOpt
         {deviceOptions.map((d) => (
           <option key={d.key} value={d.key}>
             {d.name}
+          </option>
+        ))}
+      </select>
+      <select aria-label="Account" className={select} value={account ?? ""} onChange={(e) => go({ account: e.target.value })}>
+        <option value="">All accounts</option>
+        {accountOptions.map((a) => (
+          <option key={a} value={a}>
+            {a}
           </option>
         ))}
       </select>

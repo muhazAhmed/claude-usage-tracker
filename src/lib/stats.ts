@@ -5,7 +5,9 @@ export const TZ = process.env.DASHBOARD_TZ || "Asia/Dubai";
 export const RANGES = { "1": "24 hours", "7": "7 days", "30": "30 days", "90": "90 days" } as const;
 export type RangeKey = keyof typeof RANGES;
 
-export type Filters = { days: RangeKey; device?: string; model?: string };
+export type Filters = { days: RangeKey; device?: string; model?: string; account?: string };
+
+export const NO_ACCOUNT = "(not reported)";
 
 export type Usage = {
   requests: number;
@@ -28,6 +30,15 @@ export type DeviceRow = Usage & {
   ipCount: number;
   sessions: number;
   prompts: number;
+  accounts: string[];
+  lastActive?: Date;
+};
+
+export type AccountRow = Usage & {
+  account: string;
+  devices: string[];
+  sessions: number;
+  firstActive?: Date;
   lastActive?: Date;
 };
 
@@ -69,6 +80,7 @@ export function eventMatch(f: Filters, name = "api_request"): Document {
     ts: { $gte: since(f.days) },
     ...(f.device ? { deviceKey: f.device } : {}),
     ...(f.model ? { model: f.model } : {}),
+    ...(f.account ? { account: f.account === NO_ACCOUNT ? null : f.account } : {}),
   };
 }
 
@@ -113,9 +125,23 @@ export async function getDashboard(f: Filters) {
                 _id: "$deviceKey",
                 ...usageGroup,
                 sessions: { $addToSet: "$sessionId" },
+                accounts: { $addToSet: { $ifNull: ["$account", NO_ACCOUNT] } },
                 lastActive: { $max: "$ts" },
               },
             },
+          ],
+          byAccount: [
+            {
+              $group: {
+                _id: { $ifNull: ["$account", NO_ACCOUNT] },
+                ...usageGroup,
+                sessions: { $addToSet: "$sessionId" },
+                devices: { $addToSet: "$deviceKey" },
+                firstActive: { $min: "$ts" },
+                lastActive: { $max: "$ts" },
+              },
+            },
+            { $sort: { costUsd: -1 } },
           ],
           byModel: [{ $group: { _id: "$model", ...usageGroup } }, { $sort: { costUsd: -1 } }],
           buckets: [
@@ -140,26 +166,37 @@ export async function getDashboard(f: Filters) {
   const [prev] = await events
     .aggregate([
       { $match: { ...eventMatch(f), ts: { $gte: prevStart, $lt: since(f.days) } } },
-      { $group: { _id: null, ...usageGroup, sessions: { $addToSet: "$sessionId" }, devices: { $addToSet: "$deviceKey" } } },
+      {
+        $group: {
+          _id: null,
+          ...usageGroup,
+          sessions: { $addToSet: "$sessionId" },
+          devices: { $addToSet: "$deviceKey" },
+          accounts: { $addToSet: "$account" },
+        },
+      },
     ])
     .toArray();
 
   const promptCounts = await events
     .aggregate<{ _id: string; n: number }>([
-      { $match: eventMatch({ ...f, model: undefined }, "user_prompt") },
+      { $match: eventMatch({ ...f, model: undefined, account: undefined }, "user_prompt") },
       { $group: { _id: "$deviceKey", n: { $sum: 1 } } },
     ])
     .toArray();
   const prompts = new Map(promptCounts.map((p) => [p._id, p.n]));
 
-  const [devices, models] = await Promise.all([
+  const [devices, models, accounts] = await Promise.all([
     db.collection<DeviceDoc>("devices").find().sort({ lastSeen: -1 }).toArray(),
     events.distinct("model", { name: "api_request", ts: { $gte: since("90") } }),
+    events.distinct("account", { name: "api_request", ts: { $gte: since("90") } }),
   ]);
+  const names = new Map(devices.map((d) => [d._id, deviceName(d)]));
 
   const usageByDevice = new Map<string, Document>(facet.byDevice.map((d: Document) => [d._id, d]));
   const deviceRows: DeviceRow[] = devices
-    .filter((d) => (f.device ? d._id === f.device : true))
+    // With an account filter, only list devices that account was used on.
+    .filter((d) => (f.device ? d._id === f.device : f.account ? usageByDevice.has(d._id) : true))
     .map((d) => {
       const u = usageByDevice.get(d._id);
       usageByDevice.delete(d._id);
@@ -177,6 +214,7 @@ export async function getDashboard(f: Filters) {
         ipCount: d.ips?.length ?? 0,
         sessions: u ? u.sessions.filter(Boolean).length : 0,
         prompts: prompts.get(d._id) ?? 0,
+        accounts: u?.accounts ?? [],
         lastActive: u?.lastActive ?? d.lastSeen,
       };
     });
@@ -188,6 +226,7 @@ export async function getDashboard(f: Filters) {
       ipCount: 0,
       sessions: u.sessions.filter(Boolean).length,
       prompts: prompts.get(key) ?? 0,
+      accounts: u.accounts,
       lastActive: u.lastActive,
     });
   }
@@ -201,12 +240,22 @@ export async function getDashboard(f: Filters) {
       ...(t ? pickUsage(t) : emptyUsage),
       sessions: t ? t.sessions.filter(Boolean).length : 0,
       activeDevices: facet.byDevice.length as number,
+      activeAccounts: facet.byAccount.filter((a: Document) => a._id !== NO_ACCOUNT).length as number,
     },
     previous: {
       ...(prev ? pickUsage(prev) : emptyUsage),
       sessions: prev ? prev.sessions.filter(Boolean).length : 0,
       activeDevices: prev ? (prev.devices.length as number) : 0,
+      activeAccounts: prev ? (prev.accounts.filter(Boolean).length as number) : 0,
     },
+    accounts: facet.byAccount.map((a: Document) => ({
+      ...pickUsage(a),
+      account: a._id,
+      devices: (a.devices as string[]).map((k) => names.get(k) ?? k),
+      sessions: a.sessions.filter(Boolean).length,
+      firstActive: a.firstActive,
+      lastActive: a.lastActive,
+    })) as AccountRow[],
     devices: deviceRows,
     models: facet.byModel.map((m: Document) => ({ ...pickUsage(m), model: m._id ?? "unknown" })) as ModelRow[],
     buckets: keys.map((key) => {
@@ -225,6 +274,7 @@ export async function getDashboard(f: Filters) {
     recent: facet.recent as EventDoc[],
     deviceOptions: devices.map((d) => ({ key: d._id, name: deviceName(d) })),
     modelOptions: (models.filter(Boolean) as string[]).sort(),
+    accountOptions: [...(accounts.filter(Boolean) as string[]).sort(), NO_ACCOUNT],
   };
 }
 
@@ -242,4 +292,22 @@ function pickUsage(d: Document): Usage {
 export function deviceName(d: { label?: string; host?: string; osUser?: string }) {
   const machine = [d.host, d.osUser].filter(Boolean).join(" / ") || "Unknown device";
   return d.label ? `${d.label} (${machine})` : machine;
+}
+
+export const PAGE_SIZE = 50;
+
+export async function getRecent(f: Filters, page: number) {
+  const db = await getDb();
+  const events = db.collection<EventDoc>("events");
+  const match = eventMatch(f);
+  const [rows, total] = await Promise.all([
+    events
+      .find(match, { projection: { attrs: 0 } })
+      .sort({ ts: -1 })
+      .skip((page - 1) * PAGE_SIZE)
+      .limit(PAGE_SIZE)
+      .toArray(),
+    events.countDocuments(match),
+  ]);
+  return { rows, total, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
