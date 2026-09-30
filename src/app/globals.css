@@ -92,3 +92,28 @@ body {
 .num {
   font-variant-numeric: tabular-nums;
 }
+
+/* Top progress bar and fading content while a filter change loads. */
+@keyframes loading-bar {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.loading-bar {
+  animation: loading-bar 1.1s ease-in-out infinite;
+}
+html[data-loading] main > :not(header, [data-filters]) {
+  opacity: 0.55;
+  transition: opacity 150ms;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}

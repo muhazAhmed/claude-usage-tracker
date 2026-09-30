@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { logout } from "@/app/actions";
 import { AddPcButton, type SetupCommands } from "./AddPcModal";
@@ -19,6 +19,14 @@ function Icon({ d, className = "h-4 w-4" }: { d: string; className?: string }) {
       <path d={d} />
     </svg>
   );
+}
+
+// Spinner inside a nav link while its page loads.
+function Pending() {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <span aria-label="Loading" className="ml-auto h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+  ) : null;
 }
 
 function useNav() {
@@ -57,6 +65,7 @@ export function Sidebar({ account, commands }: { account: string; commands: Setu
           >
             <Icon d={n.d} />
             {n.label}
+            <Pending />
           </Link>
         ))}
       </nav>
@@ -113,6 +122,7 @@ export function MobileNav({ commands }: { commands: SetupCommands }) {
           >
             <Icon d={n.d} className="h-3.5 w-3.5" />
             {n.label}
+            <Pending />
           </Link>
         ))}
       </nav>

@@ -32,7 +32,7 @@ export function PageHeader(props: {
         )}
       </header>
       {filters && (
-        <div className="mt-5">
+        <div className="mt-5" data-filters>
           <FilterBar
             days={filters.days}
             device={filters.device}
