@@ -29,9 +29,15 @@ Prompt text and code are never sent. Claude Code only sends prompt length unless
    | `DASHBOARD_TZ` | `Asia/Dubai` (optional, the default) |
    | `ACCOUNT_LABEL` | name shown in the sidebar (optional) |
 
-3. **Add PCs**: open the dashboard, sign in, and click **Add a PC** in the sidebar and copy the command from the popup. Paste it into PowerShell on each PC, then restart Claude Code (close terminals and reload VS Code). The PC shows up right away as "Active now".
+3. **Add PCs**: sign in, click **Add a PC** in the sidebar, choose Windows, macOS or Linux, and copy the command. Paste it into PowerShell (Windows) or Terminal (macOS and Linux), then restart Claude Code. The computer shows up right away as "Active now".
 
-   The command looks like `irm "https://<app>/api/setup?key=<INGEST_TOKEN>" | iex`. It edits `~/.claude/settings.json`, adds only the tracking variables to its `env` block, and saves a backup as `settings.json.bak`. The popup also has a matching command that removes tracking from a PC.
+   | System | Command |
+   |---|---|
+   | Windows | `irm "https://<app>/api/setup?key=<INGEST_TOKEN>" \| iex` |
+   | macOS | `curl -fsSL "https://<app>/api/setup?key=<INGEST_TOKEN>&os=mac" \| bash` |
+   | Linux | `curl -fsSL "https://<app>/api/setup?key=<INGEST_TOKEN>&os=linux" \| bash` |
+
+   Each command edits `~/.claude/settings.json`, adds only the tracking variables to its `env` block, and saves a backup as `settings.json.bak`. The macOS script uses JavaScript for Automation, which comes with every Mac; the Linux script needs `python3`. There is deliberately no command for removing tracking.
 
 ## Local development
 

@@ -13,7 +13,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const h = await headers();
   const origin = process.env.PUBLIC_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const url = `${origin.replace(/\/$/, "")}/api/setup?key=${process.env.INGEST_TOKEN ?? "<INGEST_TOKEN>"}`;
-  const commands = { install: `irm "${url}" | iex`, remove: `irm "${url}&action=remove" | iex` };
+  const commands = {
+    windows: `irm "${url}" | iex`,
+    mac: `curl -fsSL "${url}&os=mac" | bash`,
+    linux: `curl -fsSL "${url}&os=linux" | bash`,
+  };
 
   return (
     <div className="lg:flex">
